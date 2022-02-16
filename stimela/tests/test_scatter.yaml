@@ -1,0 +1,79 @@
+_include:
+  - custom_cabs.yaml
+
+opts:
+  log:
+    dir: logs 
+    nest: 3
+
+
+## but also top-level sections are treated as recipe names
+simplesim:
+  name: simple_sim
+  info: Simulate observation and image PSF
+#  batch:
+#    scheduler: slurm
+#    cpus: 4
+#    mem: 4Gb
+#    email: <your email @ here>
+
+  assign:
+    dir: 
+      out: output
+    log:
+      dir: logs
+      name: 'log-{info.fqname}.txt'
+
+  inputs:
+    msname:
+      dtype: str
+      default: myms.ms
+
+  steps: 
+    makems: 
+      cab: simms
+      skip: false
+      params:
+        tel: meerkat
+        synthesis: 1 # hours
+        dtime: 10 # seconds
+        dfreq: 1MHz
+        freq0: 1.40GHz
+        nchan: 10
+        ms: "{recipe.msname}"
+    image_psf:
+      params:
+        ms: "{previous.ms}"
+      recipe:
+        inputs:
+          prefix:
+            dtype: str
+            default: psfimage-robust
+        for_loop:
+          var: robust
+          over: [0,1,2]
+          scatter: true
+        aliases:
+          ms: image.ms 
+        steps:
+          image:
+            skip: true
+            cab: wsclean_psf
+            params:
+              prefix: "psfimage-robust_{recipe.robust}" 
+              weight: "briggs {recipe.robust}"
+              make-psf-only: true
+              size: 256
+              scale: 2asec
+        outputs:
+          imagelist:
+            dtype: List[File]
+            implicit: "{current.prefix}_[0-9]-psf.fits"
+            policies:
+              skip: true
+    stackem:
+      cab: fitstool_stack
+      params:
+        images: "{previous.imagelist}"
+        output: stacked-images.fits
+        stack_axis: FREQ
