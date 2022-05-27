@@ -40,6 +40,14 @@ cabs:
           repeat: list
     dynamic_schema: stimela.tests.example_dynschema.cubical_schema
 
+  example_callable:
+    command: (example_callable)example_function
+    inputs:
+      x:
+        default: xxx
+      y:
+        default: yyy
+
   wsclean:
     image: null
     command: echo
@@ -104,6 +112,12 @@ recipe:
         band_label: "band2-{recipe.band}"
 
   steps: 
+      example_callable:
+        cab: example_callable
+        params:
+          x: 1
+          y: 2
+
       makems:
           cab: simms
           params:
