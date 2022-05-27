@@ -15,19 +15,28 @@ from io import TextIOBase
 
 
 class LoggerIO(TextIOBase):
+    _inside_logger = set()
+
     """This is a stream class which captures text stream output into a logger, applying an optional output wrangler"""
-    def __init__(self, log, command_name, stream_name, output_wrangler=None):
+    def __init__(self, log, command_name, stream, stream_name, output_wrangler=None):
         self.log = log
         self.command_name = command_name
+        self.stream = stream
         self.stream_name = stream_name
         self.output_wrangler = output_wrangler
 
     def write(self, s):
-        if s != "\n":
-            for line in s.rstrip().split("\n"):
-                dispatch_to_log(self.log, line, self.command_name, self.stream_name, 
-                                output_wrangler=self.output_wrangler)
-        return len(s)
+        if id(self) in LoggerIO._inside_logger:
+            return self.stream.write(s)
+        LoggerIO._inside_logger.add(id(self))
+        try:
+            if s != "\n":
+                for line in s.rstrip().split("\n"):
+                    dispatch_to_log(self.log, line, self.command_name, self.stream_name, 
+                                    output_wrangler=self.output_wrangler)
+            return len(s)
+        finally:
+            LoggerIO._inside_logger.remove(id(self))
 
 
 def run(cab: Cab, params: Dict[str, Any], log, subst: Optional[Dict[str, Any]] = None, batch=None):
@@ -101,8 +110,8 @@ def run_callable(modulename: str, funcname: str,  cab: Cab, params: Dict[str, An
     # redirect and call
     cab.reset_runtime_status()
     try:
-        with redirect_stdout(LoggerIO(log, funcname, "stdout", output_wrangler=cab.apply_output_wranglers)), \
-                redirect_stderr(LoggerIO(log, funcname, "stderr", output_wrangler=cab.apply_output_wranglers)):
+        with redirect_stdout(LoggerIO(log, funcname, stream_name="stdout", stream=sys.stdout, output_wrangler=cab.apply_output_wranglers)), \
+                redirect_stderr(LoggerIO(log, funcname, stream_name="stderr", stream=sys.stderr, output_wrangler=cab.apply_output_wranglers)):
             retval = func(**args)
     except Exception as exc:
         for line in traceback.format_exception(*sys.exc_info()):
